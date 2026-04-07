@@ -2,19 +2,6 @@
 
 Cosmos is a **2D real-time virtual environment** where users interact through avatars and communicate based on spatial proximity, creating a game-like social experience.
 
----
-
-## 🚀 Features
-
-- 🎮 **Real-Time Avatars** – Smooth 60fps movement using PixiJS (WebGL)
-- 📍 **Proximity-Based Chat** – Messages visible only within a defined radius
-- 💾 **Persistent World** – User positions and chat history stored in MongoDB
-- ⚡ **Real-Time Sync** – Low-latency communication via Socket.io
-- 🎨 **Custom Avatars** – Choose name and avatar color
-- 📊 **Dynamic UI** – Activity feed and recent conversations
-
----
-
 ## 🛠️ Tech Stack
 
 **Frontend**
