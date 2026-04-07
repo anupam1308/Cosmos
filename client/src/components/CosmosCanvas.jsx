@@ -35,23 +35,42 @@ export function CosmosCanvas({ users, myId, onMove }) {
     app.stage.addChild(world);
 
     // Create a background layer inside the world
-    const bgTexture = PIXI.Texture.from('/office_map.png');
-    const background = new PIXI.Sprite(bgTexture);
-    background.anchor.set(0);
-    world.addChild(background);
+    const MAP_WIDTH = 2000; // Increased width for a bigger office
+    const MAP_HEIGHT = 1500; // Increased height
 
-    const MAP_WIDTH = 1200;
-    const MAP_HEIGHT = 800;
-    background.width = MAP_WIDTH;
-    background.height = MAP_HEIGHT;
+    // Load background texture with fallback
+    PIXI.Assets.load('/office_map.png').then((texture) => {
+      const background = new PIXI.Sprite(texture);
+      background.width = MAP_WIDTH;
+      background.height = MAP_HEIGHT;
+      world.addChildAt(background, 0); // Put it at the bottom
+    }).catch(() => {
+      // Fallback: Tiling Grid if image fails
+      const fallback = new PIXI.Graphics();
+      fallback.beginFill(0x334155);
+      fallback.drawRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+      fallback.endFill();
+      // Draw grid lines
+      fallback.lineStyle(2, 0x475569, 0.5);
+      for(let i=0; i<MAP_WIDTH; i+=100) {
+        fallback.moveTo(i, 0); fallback.lineTo(i, MAP_HEIGHT);
+      }
+      for(let j=0; j<MAP_HEIGHT; j+=100) {
+        fallback.moveTo(0, j); fallback.lineTo(MAP_WIDTH, j);
+      }
+      world.addChildAt(fallback, 0);
+    });
 
     // Resize world to fit the container precisely
     function fitToScreen() {
-      const scale = Math.min(app.screen.width / MAP_WIDTH, app.screen.height / MAP_HEIGHT);
+      const targetWidth = 2000;
+      const targetHeight = 1500;
+      // Change to Math.max for "Cover" mode to fill the gap
+      const scale = Math.max(app.screen.width / targetWidth, app.screen.height / targetHeight);
       world.scale.set(scale);
-      // Center it
-      world.x = (app.screen.width - MAP_WIDTH * scale) / 2;
-      world.y = (app.screen.height - MAP_HEIGHT * scale) / 2;
+      // Center the map in the view
+      world.x = (app.screen.width - targetWidth * scale) / 2;
+      world.y = (app.screen.height - targetHeight * scale) / 2;
     }
 
     fitToScreen();
@@ -59,12 +78,14 @@ export function CosmosCanvas({ users, myId, onMove }) {
 
     // Setup input listeners for movement
     const onKeyDown = (e) => { 
+      if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
       const key = e.key.toLowerCase();
       if (keysRef.current[key] !== undefined) keysRef.current[key] = true; 
       if (keysRef.current[e.key] !== undefined) keysRef.current[e.key] = true; 
     };
     
     const onKeyUp = (e) => { 
+      if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
       const key = e.key.toLowerCase();
       if (keysRef.current[key] !== undefined) keysRef.current[key] = false; 
       if (keysRef.current[e.key] !== undefined) keysRef.current[e.key] = false; 
@@ -93,8 +114,8 @@ export function CosmosCanvas({ users, myId, onMove }) {
       if ((dx !== 0 || dy !== 0) && currentId && currentUsers[currentId]) {
         const myPs = currentUsers[currentId];
         // Calculate and bound new position (clamped inside the map)
-        const targetX = Math.max(0, Math.min(MAP_WIDTH, myPs.x + dx));
-        const targetY = Math.max(0, Math.min(MAP_HEIGHT, myPs.y + dy));
+        const targetX = Math.max(0, Math.min(2000, myPs.x + dx));
+        const targetY = Math.max(0, Math.min(1500, myPs.y + dy));
         onMove(targetX, targetY);
       }
       
@@ -111,7 +132,7 @@ export function CosmosCanvas({ users, myId, onMove }) {
         avatar.x += (user.x - avatar.x) * 0.25;
         avatar.y += (user.y - avatar.y) * 0.25;
 
-        // Visual proximity ring for the current user
+        // Visual chat ring for the current user
         if (user.id === currentId && !avatar.ring) {
           avatar.ring = new PIXI.Graphics();
           avatar.ring.lineStyle(1.5, 0xffffff, 0.4);

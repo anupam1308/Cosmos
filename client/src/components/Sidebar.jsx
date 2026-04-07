@@ -1,44 +1,55 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Search, Bell, MessageSquare, Calendar, 
-  Map, PhoneCall, Users, ChevronDown 
+  Users, ChevronDown 
 } from 'lucide-react';
 
-export function Sidebar({ users, myId }) {
-  // Convert users object to an array for easy mapping
-  const connectedUsers = Object.values(users);
+export function Sidebar({ users, myId, activities = [], recentConversations = [], onOpenModal }) {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Convert users object to an array for easy mapping and filtering
+  const connectedUsers = Object.values(users).filter(user => 
+    user.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <aside className="w-64 h-full bg-slate-50 border-r border-slate-200 flex flex-col shadow-sm">
+    <aside className="w-80 h-full bg-slate-50 border-r border-slate-200 flex flex-col shadow-sm transition-all duration-300">
       {/* Search Header */}
-      <div className="p-4 border-b border-slate-100">
+      <div className="p-3.5 border-b border-slate-100">
         <div className="relative flex items-center">
           <Search className="absolute left-3 text-slate-400" size={16} />
           <input 
             type="text" 
-            placeholder="Search" 
+            placeholder="Search"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)} 
             className="w-full pl-9 pr-4 py-2 bg-slate-200/50 rounded-md text-sm text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-slate-300 transition-all border border-transparent focus:border-slate-300"
           />
         </div>
       </div>
 
       {/* Scrollable Menu Area */}
-      <div className="flex-1 overflow-y-auto pt-4 pb-4">
+      <div className="flex-1 overflow-y-auto pt-3 pb-3">
         
         {/* Top Menus */}
         <div className="px-3 mb-6 space-y-1">
-          <MenuItem icon={<Bell size={18} />} label="Activities" badge={1} />
-          <MenuItem icon={<MessageSquare size={18} />} label="Recent Conversations" badge={1} />
-          <MenuItem icon={<Calendar size={18} />} label="Today's Calendar" />
-        </div>
-
-        {/* Rooms Section */}
-        <div className="px-3 mb-6">
-          <SectionHeader title="Rooms" />
-          <div className="space-y-1 mt-1">
-            <MenuItem icon={<Map size={18} />} label="Dev Club" isActive />
-            <MenuItem icon={<PhoneCall size={18} />} label="Start New Call" />
-          </div>
+          <MenuItem 
+            icon={<Bell size={18} />} 
+            label="Activities" 
+            badge={activities.length > 0 ? activities.length : null} 
+            onClick={() => onOpenModal('activities')} 
+          />
+          <MenuItem 
+            icon={<MessageSquare size={18} />} 
+            label="Recent Conversations" 
+            badge={recentConversations.length > 0 ? recentConversations.length : null} 
+            onClick={() => onOpenModal('conversations')} 
+          />
+          <MenuItem 
+            icon={<Calendar size={18} />} 
+            label="Today's Calendar" 
+            onClick={() => onOpenModal('calendar')} 
+          />
         </div>
 
         {/* Team Section (Dynamic Users) */}
@@ -81,11 +92,13 @@ export function Sidebar({ users, myId }) {
 }
 
 // Helper generic components for clean code reading
-function MenuItem({ icon, label, badge, isActive }) {
+function MenuItem({ icon, label, badge, isActive, onClick }) {
   return (
-    <button className={`w-full flex items-center justify-between px-3 py-2 text-sm rounded-md transition-colors ${
-      isActive ? 'bg-slate-200 font-medium text-slate-900' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-    }`}>
+    <button 
+      onClick={onClick}
+      className={`w-full flex items-center justify-between px-3 py-2 text-sm rounded-md transition-colors ${
+        isActive ? 'bg-slate-200 font-medium text-slate-900' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+      }`}>
       <div className="flex items-center gap-3">
         <span className={isActive ? 'text-slate-800' : 'text-slate-500'}>
           {icon}

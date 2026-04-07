@@ -1,15 +1,18 @@
 import { useEffect, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = 'http://localhost:3001';
+const SOCKET_URL = 'http://localhost:3002';
 
 export function useSocket(userConfig) {
   const [socket, setSocket] = useState(null);
   const [users, setUsers] = useState({});
   const [connections, setConnections] = useState([]);
   const [messages, setMessages] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [recentConversations, setRecentConversations] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const [myId, setMyId] = useState(null);
+  const [myName, setMyName] = useState(null);
 
   useEffect(() => {
     if (!userConfig) return;
@@ -20,7 +23,10 @@ export function useSocket(userConfig) {
     newSocket.on('connect', () => {
       setIsConnected(true);
       setMyId(newSocket.id);
+      setMyName(userConfig.name);
       newSocket.emit('join', userConfig);
+      newSocket.emit('get_recent_conversations', userConfig.name);
+      newSocket.emit('get_activities');
     });
 
     newSocket.on('init_state', (initialUsers) => {
@@ -39,6 +45,14 @@ export function useSocket(userConfig) {
 
     newSocket.on('user_joined', (user) => {
       setUsers(prev => ({ ...prev, [user.id]: user }));
+      // Generate activity
+      if (user.id !== newSocket.id) {
+        setActivities(prev => [{
+          id: Date.now(),
+          text: `${user.name} joined the Cosmos`,
+          timestamp: new Date().toISOString()
+        }, ...prev]);
+      }
     });
 
     newSocket.on('user_moved', ({ id, x, y }) => {
@@ -64,15 +78,40 @@ export function useSocket(userConfig) {
 
     newSocket.on('chat_message', (msg) => {
       setMessages(prev => [...prev, msg]);
+      // Also update history in real-time so the modal is always fresh
+      setRecentConversations(prev => [msg, ...prev]);
     });
 
     newSocket.on('user_left', (id) => {
       setUsers(prev => {
         const newUsers = { ...prev };
+        const leftUser = newUsers[id];
+        if (leftUser) {
+           setActivities(act => [{
+             id: Date.now(),
+             text: `${leftUser.name} left the Cosmos`,
+             timestamp: new Date().toISOString()
+           }, ...act]);
+        }
         delete newUsers[id];
         return newUsers;
       });
       setConnections(prev => prev.filter(connId => connId !== id));
+    });
+
+    newSocket.on('recent_conversations', (history) => {
+      // Keep server's "newest first" order
+      setRecentConversations(history);
+    });
+
+    newSocket.on('activities_history', (history) => {
+      // Format activities for the UI (server sends DB objects)
+      const formatted = history.map(h => ({
+        id: h._id,
+        text: h.text,
+        timestamp: h.timestamp
+      }));
+      setActivities(formatted);
     });
 
     newSocket.on('disconnect', () => {
@@ -100,5 +139,5 @@ export function useSocket(userConfig) {
     }
   }, [socket]);
 
-  return { socket, users, connections, messages, isConnected, myId, move, sendMessage };
+  return { socket, users, connections, messages, activities, recentConversations, isConnected, myId, myName, move, sendMessage };
 }

@@ -2,14 +2,41 @@ const { PROXIMITY_RADIUS } = require('../config/constants');
 const { getDistance } = require('../utils/distance');
 const state = require('../store/state');
 const User = require('../models/User'); // Updated to User model
+const Message = require('../models/Message');
+const Activity = require('../models/Activity');
 
 function registerSocketHandlers(io, socket) {
   console.log(`User connected: ${socket.id}`);
 
   socket.on('join', async ({ name, color }) => {
-    const x = Math.random() * 800 + 100;
-    const y = Math.random() * 600 + 100;
+    console.log(`Join request from: ${name} (${color})`);
+    let x = Math.random() * 800 + 100;
+    let y = Math.random() * 600 + 100;
     
+    // Find user by name, load position if exists
+    try {
+      const existingUser = await User.findOneAndUpdate(
+        { name },
+        {
+          socketId: socket.id,
+          color,
+          lastSeen: Date.now()
+        },
+        { upsert: true, new: true }
+      );
+      
+      // Use previous position if available, else save new ones
+      if (existingUser && existingUser.position && existingUser.position.x !== undefined) {
+        x = existingUser.position.x;
+        y = existingUser.position.y;
+      } else {
+        existingUser.position = { x, y };
+        await existingUser.save();
+      }
+    } catch (err) {
+      console.warn('MongoDB Session Warning:', err.message);
+    }
+
     state.users[socket.id] = {
       id: socket.id,
       name,
@@ -19,20 +46,14 @@ function registerSocketHandlers(io, socket) {
       connectedWith: []
     };
 
-    // Upsert user to MongoDB based on socket ID acting as userId for now
+    // Log join activity
     try {
-      await User.findOneAndUpdate(
-        { userId: socket.id },
-        {
-          name,
-          color,
-          lastSeen: Date.now(),
-          position: { x, y }
-        },
-        { upsert: true, new: true }
-      );
+      await Activity.create({
+        text: `${name} joined the Cosmos`,
+        type: 'join'
+      });
     } catch (err) {
-      console.warn('MongoDB Session Warning:', err.message);
+      console.warn('MongoDB Activity Error:', err.message);
     }
 
     const usersList = Object.values(state.users).map(u => ({...u, connectedWith: u.connectedWith}));
@@ -79,13 +100,36 @@ function registerSocketHandlers(io, socket) {
     });
 
     socket.broadcast.emit('user_moved', { id: socket.id, x, y });
+
+    // Optional: periodic/throttled DB update for position persistence
+    // For now, let's just make sure it's saved during movement to be safe
+    User.findOneAndUpdate({ socketId: socket.id }, { position: { x, y } }).catch(() => {});
   });
 
-  socket.on('chat_message', (msg) => {
+  socket.on('chat_message', async (msg) => {
     const user = state.users[socket.id];
     if (!user) return;
 
     const recipients = [...user.connectedWith, socket.id];
+    
+    // Save to Database
+    try {
+      const recipientNames = recipients.map(id => state.users[id]?.name).filter(Boolean);
+      // Ensure sender is always in the recipients list for easier unified querying
+      if (!recipientNames.includes(user.name)) {
+        recipientNames.push(user.name);
+      }
+      
+      console.log(`Saving message from ${user.name} to ${recipientNames.join(', ')}`);
+      await Message.create({
+        senderName: user.name,
+        text: msg,
+        recipients: recipientNames
+      });
+    } catch (err) {
+      console.warn('MongoDB Message Error:', err.message);
+    }
+
     recipients.forEach(recId => {
       io.to(recId).emit('chat_message', {
         id: Math.random().toString(36).substring(7),
@@ -97,18 +141,56 @@ function registerSocketHandlers(io, socket) {
     });
   });
 
+  socket.on('get_recent_conversations', async (userName) => {
+    console.log(`Fetching conversations for: ${userName}`);
+    try {
+      // Find messages where the user was the sender OR in the recipients list
+      const messages = await Message.find({
+        $or: [
+          { senderName: userName },
+          { recipients: userName }
+        ]
+      }).sort({ timestamp: -1 }).limit(50); // Get last 50 messages
+      
+      console.log(`Found ${messages.length} messages for ${userName}`);
+      socket.emit('recent_conversations', messages);
+    } catch (err) {
+      console.warn('MongoDB Fetch Error:', err.message);
+    }
+  });
+
+  socket.on('get_activities', async () => {
+    try {
+      const activities = await Activity.find().sort({ timestamp: -1 }).limit(20);
+      socket.emit('activities_history', activities);
+    } catch (err) {
+      console.warn('MongoDB Activity Fetch Error:', err.message);
+    }
+  });
+
   socket.on('disconnect', async () => {
     console.log(`User disconnected: ${socket.id}`);
     const user = state.users[socket.id];
     
     if (user) {
-      // Record disconnection in database
+      // Log leave activity
+      try {
+        await Activity.create({
+          text: `${user.name} left the Cosmos`,
+          type: 'leave'
+        });
+      } catch (err) {
+        console.warn('MongoDB Activity Error:', err.message);
+      }
+
+      // Record disconnection in database by name
       try {
         await User.findOneAndUpdate(
-          { userId: socket.id },
+          { name: user.name },
           { 
             lastSeen: Date.now(),
-            position: { x: user.x, y: user.y }
+            position: { x: user.x, y: user.y },
+            socketId: null
           }
         );
       } catch(err) {
