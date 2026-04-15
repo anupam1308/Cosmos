@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = 'http://localhost:3002';
+//const SOCKET_URL = 'http://localhost:3001';
+const SOCKET_URL = 'https://cosmos-oizl.onrender.com';
 
 export function useSocket(userConfig) {
   const [socket, setSocket] = useState(null);
